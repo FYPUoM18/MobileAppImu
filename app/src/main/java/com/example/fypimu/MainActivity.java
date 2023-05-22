@@ -5,7 +5,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
-import android.os.Handler;
+import android.os.Environment;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.ForegroundColorSpan;
@@ -13,8 +13,14 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -27,9 +33,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Button stopReadingButton;
     private TextView dataTextView;
     private Queue<String> dataQueue;
-    private Handler sendDataHandler;
-    private Runnable sendDataRunnable;
     private boolean isReadingData = false;
+
+    // Define the maximum queue size
+    private static final int MAX_QUEUE_SIZE = 10;
+
+    // Create queues for each sensor data
+    private Queue<String> acceQueue = new LinkedList<>();
+    private Queue<String> gameRvQueue = new LinkedList<>();
+    private Queue<String> gyroQueue = new LinkedList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,16 +64,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // Initialize data queue
         dataQueue = new LinkedList<>();
 
-        // Initialize handler and runnable for sending data every 20 seconds
-        sendDataHandler = new Handler();
-        sendDataRunnable = new Runnable() {
-            @Override
-            public void run() {
-                sendDataToServer();
-                sendDataHandler.postDelayed(this, 20000); // 20 seconds delay
-            }
-        };
-
         // Set click listener for the start reading button
         startReadingButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -82,9 +84,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Unregister sensor listeners and remove any pending data send tasks
+        // Unregister sensor listeners
         stopReadingData();
-        sendDataHandler.removeCallbacks(sendDataRunnable);
     }
 
     @Override
@@ -97,8 +98,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 float z = event.values[2];
                 // Process the gyroscope data as needed
                 // Add gyroscope data to the queue
-                String gyroData = "Gyroscope Data:\nX: " + x + "\nY: " + y + "\nZ: " + z;
-                dataQueue.offer(gyroData);
+                String gyroData = x + " " + y + " " + z;
+                gyroQueue.offer(gyroData);
             } else if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
                 // Accelerometer data
                 float x = event.values[0];
@@ -106,8 +107,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 float z = event.values[2];
                 // Process the accelerometer data as needed
                 // Add accelerometer data to the queue
-                String accelData = "Accelerometer Data:\nX: " + x + "\nY: " + y + "\nZ: " + z;
-                dataQueue.offer(accelData);
+                String accelData = x + " " + y + " " + z;
+                acceQueue.offer(accelData);
             } else if (event.sensor.getType() == Sensor.TYPE_GAME_ROTATION_VECTOR) {
                 // Rotation vector data
                 float x = event.values[0];
@@ -115,8 +116,21 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 float z = event.values[2];
                 // Process the rotation vector data as needed
                 // Add rotation vector data to the queue
-                String rotationVectorData = "Rotation Vector Data:\nX: " + x + "\nY: " + y + "\nZ: " + z;
-                dataQueue.offer(rotationVectorData);
+                String rotationVectorData = x + " " + y + " " + z;
+                gameRvQueue.offer(rotationVectorData);
+            }
+
+            // Check if any queue has reached the maximum size
+            if (acceQueue.size() == MAX_QUEUE_SIZE || gyroQueue.size() == MAX_QUEUE_SIZE || gameRvQueue.size() == MAX_QUEUE_SIZE) {
+                // Write data to files
+                writeDataToFile(acceQueue, "acce.txt");
+                writeDataToFile(gyroQueue, "gyro.txt");
+                writeDataToFile(gameRvQueue, "game_rv.txt");
+
+                // Clear the queues
+                acceQueue.clear();
+                gyroQueue.clear();
+                gameRvQueue.clear();
             }
 
             // Display the current set of data
@@ -141,9 +155,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
 
-        // Start sending data to the server every 20 seconds
-        sendDataHandler.postDelayed(sendDataRunnable, 2000);
-
         // Update UI
         startReadingButton.setVisibility(View.GONE);
         stopReadingButton.setVisibility(View.VISIBLE);
@@ -155,11 +166,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // Unregister sensor listeners
         sensorManager.unregisterListener(this);
 
-        // Stop sending data to the server
-        sendDataHandler.removeCallbacks(sendDataRunnable);
-
-        // Clear the data queue
-        dataQueue.clear();
+        // Clear the queues
+        acceQueue.clear();
+        gyroQueue.clear();
+        gameRvQueue.clear();
 
         // Update UI
         stopReadingButton.setVisibility(View.GONE);
@@ -168,18 +178,32 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         isReadingData = false;
     }
 
-    private void sendDataToServer() {
-        // Check if there is data in the queue
-        if (!dataQueue.isEmpty()) {
-            // Send the data to the server
-            String data = dataQueue.poll();
-            // Implement your logic to send the data to the server here
-            // If the data is sent successfully, remove it from the queue
-//            Toast.makeText(MainActivity.this, "Data sent: " + data, Toast.LENGTH_SHORT).show();
+    private void writeDataToFile(Queue<String> queue, String fileName) {
+        // Check if external storage is available
+        if (isExternalStorageWritable()) {
+            // Get the directory for the app's private files
+            File dir = new File(getExternalFilesDir(null), "sensor_data");
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
 
-            System.out.println("data"+data);
-            // Display the updated data queue
-            displayDataQueue();
+            // Create a file in the directory
+            File file = new File(dir, fileName);
+
+            try {
+                // Create a FileWriter and write data to the file
+                FileWriter writer = new FileWriter(file, true); // Append mode
+                while (!queue.isEmpty()) {
+                    String data = queue.poll();
+                    writer.append(data).append("\n");
+                }
+                writer.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Toast.makeText(this, "Error writing data to file", Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            Toast.makeText(this, "External storage is not available", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -190,19 +214,24 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // Create a SpannableStringBuilder to apply spannable text
         SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();
 
-        // Append the data sets in the queue
-        LinkedList<String> dataList = new LinkedList<>(dataQueue);
-        for (int i = dataList.size() - 1; i >= 0; i--) {
-            String data = dataList.get(i);
-            if (i == dataList.size() - 1) {
-                // Apply different color to the latest data
-                spannableStringBuilder.append(data + "\n\n");
-                int startIndex = spannableStringBuilder.length() - data.length() - 2; // Adjust index to exclude the newlines
-                int endIndex = spannableStringBuilder.length() - 2; // Adjust index to exclude the newlines
-                spannableStringBuilder.setSpan(new ForegroundColorSpan(Color.RED), startIndex, endIndex, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            } else {
-                spannableStringBuilder.append(data + "\n\n");
-            }
+        // Append the accelerometer data
+        spannableStringBuilder.append("Accelerometer Data:\n");
+        for (String data : acceQueue) {
+            spannableStringBuilder.append(data).append("\n");
+        }
+        spannableStringBuilder.append("\n");
+
+        // Append the gyroscope data
+        spannableStringBuilder.append("Gyroscope Data:\n");
+        for (String data : gyroQueue) {
+            spannableStringBuilder.append(data).append("\n");
+        }
+        spannableStringBuilder.append("\n");
+
+        // Append the rotation vector data
+        spannableStringBuilder.append("Rotation Vector Data:\n");
+        for (String data : gameRvQueue) {
+            spannableStringBuilder.append(data).append("\n");
         }
 
         // Set the spannable text to the TextView
@@ -210,5 +239,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         // Scroll to the top of the TextView
         dataTextView.scrollTo(0, 0);
+    }
+
+
+    private boolean isExternalStorageWritable() {
+        String state = Environment.getExternalStorageState();
+        return Environment.MEDIA_MOUNTED.equals(state);
     }
 }
