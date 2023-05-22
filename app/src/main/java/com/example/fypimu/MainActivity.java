@@ -98,8 +98,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 float z = event.values[2];
                 // Process the gyroscope data as needed
                 // Add gyroscope data to the queue
-                String gyroData = x + " " + y + " " + z;
+                String gyroData = String.format("%.15e %.15e %.15e", x, y, z);
                 gyroQueue.offer(gyroData);
+                // Write gyroscope data to file when the queue reaches the maximum size
+                if (gyroQueue.size() >= MAX_QUEUE_SIZE) {
+                    writeDataToFile("gyro.txt", gyroQueue);
+                    gyroQueue.clear();
+                }
             } else if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
                 // Accelerometer data
                 float x = event.values[0];
@@ -107,8 +112,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 float z = event.values[2];
                 // Process the accelerometer data as needed
                 // Add accelerometer data to the queue
-                String accelData = x + " " + y + " " + z;
+                String accelData = String.format("%.15e %.15e %.15e", x, y, z);
                 acceQueue.offer(accelData);
+                // Write accelerometer data to file when the queue reaches the maximum size
+                if (acceQueue.size() >= MAX_QUEUE_SIZE) {
+                    writeDataToFile("acce.txt", acceQueue);
+                    acceQueue.clear();
+                }
             } else if (event.sensor.getType() == Sensor.TYPE_GAME_ROTATION_VECTOR) {
                 // Rotation vector data
                 float x = event.values[0];
@@ -116,27 +126,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 float z = event.values[2];
                 // Process the rotation vector data as needed
                 // Add rotation vector data to the queue
-                String rotationVectorData = x + " " + y + " " + z;
+                String rotationVectorData = String.format("%.15e %.15e %.15e", x, y, z);
                 gameRvQueue.offer(rotationVectorData);
-            }
-
-            // Check if any queue has reached the maximum size
-            if (acceQueue.size() == MAX_QUEUE_SIZE || gyroQueue.size() == MAX_QUEUE_SIZE || gameRvQueue.size() == MAX_QUEUE_SIZE) {
-                // Write data to files
-                writeDataToFile(acceQueue, "acce.txt");
-                writeDataToFile(gyroQueue, "gyro.txt");
-                writeDataToFile(gameRvQueue, "game_rv.txt");
-
-                // Clear the queues
-                acceQueue.clear();
-                gyroQueue.clear();
-                gameRvQueue.clear();
+                // Write rotation vector data to file when the queue reaches the maximum size
+                if (gameRvQueue.size() >= MAX_QUEUE_SIZE) {
+                    writeDataToFile("game_rv.txt", gameRvQueue);
+                    gameRvQueue.clear();
+                }
             }
 
             // Display the current set of data
             displayDataQueue();
         }
     }
+
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -178,21 +181,24 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         isReadingData = false;
     }
 
-    private void writeDataToFile(Queue<String> queue, String fileName) {
-        // Check if external storage is available
-        if (isExternalStorageWritable()) {
-            // Get the directory for the app's private files
-            File dir = new File(getExternalFilesDir(null), "sensor_data");
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
+    private String getFilePath(String fileName) {
+        File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (!downloadsDir.exists()) {
+            downloadsDir.mkdirs();
+        }
+        return downloadsDir.getAbsolutePath() + File.separator + fileName;
+    }
 
-            // Create a file in the directory
-            File file = new File(dir, fileName);
+    private void writeDataToFile( String fileName,Queue<String> queue) {
+        // Check if external storage is available
+        String filePath = getFilePath(fileName);
+
+        if (isExternalStorageWritable()) {
+
 
             try {
                 // Create a FileWriter and write data to the file
-                FileWriter writer = new FileWriter(file, true); // Append mode
+                FileWriter writer = new FileWriter(filePath, true); // Append mode
                 while (!queue.isEmpty()) {
                     String data = queue.poll();
                     writer.append(data).append("\n");
