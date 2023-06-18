@@ -4,12 +4,17 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.provider.Settings;
 import android.text.SpannableStringBuilder;
+import android.text.TextUtils;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.Button;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -26,6 +31,10 @@ import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
 
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -37,6 +46,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Sensor rotationVectorSensor;
     private Button startReadingButton;
     private Button stopReadingButton;
+    private Spinner buildingSpinner;
+    private String selectedBuilding;
     private TextView dataTextView;
     private Queue<String> dataQueue;
     private boolean isReadingData = false;
@@ -46,18 +57,42 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     // Create queues for each sensor data
     private Queue<String> acceQueue = new LinkedList<>();
-    private String lastAcceVal = "0 0 0";
+    private String lastAcceVal = "";
     private Queue<String> gameRvQueue = new LinkedList<>();
-    private String lastGameRvVal = "0 0 0 0";
+    private String lastGameRvVal = "";
     private Queue<String> gyroQueue = new LinkedList<>();
-    private String lastGyroVal = "0 0 0";
+    private String lastGyroVal = "";
+    private Queue<String> locQueue = new LinkedList<>();
 
     private String currentSessionFileFolder = UUID.randomUUID().toString();
+    private String GAME_RV_FILE_NAME = "game_rv.txt";
+    private String ACCE_FILE_NAME = "acce.txt";
+    private String GYRO_FILE_NAME = "gyro.txt";
+    private String LOC_FILE_NAME = "loc.txt";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // Initialize the building spinner
+        buildingSpinner = findViewById(R.id.buildingSpinner);
+
+        // Set a listener to handle building selection
+        buildingSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                selectedBuilding = parent.getItemAtPosition(position).toString();
+                if (selectedBuilding.equals("Random")) {
+                    selectedBuilding = UUID.randomUUID().toString();
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // Do nothing
+            }
+        });
 
         // Initialize sensor manager
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -147,11 +182,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 // Write rotation vector data to file when the queue reaches the maximum size
 
             }
+            locQueue.offer(timestamp + " 6.264115135062672479e+00 1.449032789170667890e+01");
             if (gameRvQueue.size() >= MAX_QUEUE_SIZE) {
-//                    writeDataToFile("fyp_game_rv.txt", gameRvQueue);
                 gameRvQueue.clear();
                 acceQueue.clear();
                 gyroQueue.clear();
+                locQueue.clear();
             }
 
             // Display the current set of data
@@ -213,72 +249,141 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         @Override
         public void run() {
             // Write sensor data to files
-            writeDataToFile("fyp_gyro.txt", gyroQueue);
-            writeDataToFile("fyp_acce.txt", acceQueue);
-            writeDataToFile("fyp_game_rv.txt", gameRvQueue);
+            String buildingName = selectedBuilding;
+            String deviceId = getDeviceIdentifier();
+            String filePreFix = selectedBuilding + "_" + deviceId;
 
+            writeDataToFile(getFileNamePreFixed(GYRO_FILE_NAME), gyroQueue);
+            writeDataToFile(getFileNamePreFixed(ACCE_FILE_NAME), acceQueue);
+            writeDataToFile(getFileNamePreFixed(GAME_RV_FILE_NAME), gameRvQueue);
+            writeDataToFile(getFileNamePreFixed(LOC_FILE_NAME), locQueue);
             // Schedule the next execution after the specified interval
             sendDataHandler.postDelayed(this, (long) 00.1);
         }
     };
 
+    private String getFileNamePreFixed(String fileName) {
+        String deviceId = getDeviceIdentifier();
+        String filePreFix = selectedBuilding + "_" + deviceId;
+        return filePreFix + "_" + fileName;
+    }
+
+    private String getDeviceIdentifier() {
+        String deviceId = "";
+
+        // Retrieve the device identifier using the appropriate method
+        // For example, you can use the device's serial number
+        deviceId = Build.SERIAL;
+
+        // If the serial number is not available, you can use the Android ID
+        if (TextUtils.isEmpty(deviceId) || deviceId.equals(Build.UNKNOWN)) {
+            deviceId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+        }
+
+        return deviceId;
+    }
+
     private void sendDataToServer() {
         // Create an instance of the ApiService using the ApiManager
         ApiService apiService = ApiManager.getApiService();
 
-        List<String> gyroData = readFileToString("fyp_gyro.txt");
-        List<String> accelData = readFileToString("fyp_acce.txt");
-        List<String> rotationVectorData = readFileToString("fyp_game_rv.txt");
+        String gyroData = getFilePath(getFileNamePreFixed(GYRO_FILE_NAME));
+        String accelData = getFilePath(getFileNamePreFixed(ACCE_FILE_NAME));
+        String rotationVectorData = getFilePath(getFileNamePreFixed(GAME_RV_FILE_NAME));
+        String locData = getFilePath(getFileNamePreFixed(LOC_FILE_NAME));
+        File file1 = new File(gyroData);
+        File file2 = new File(accelData);
+        File file3 = new File(rotationVectorData);
+        File file4 = new File(locData);
+
+        RequestBody requestBody1 = RequestBody.create(MediaType.parse("multipart/form-data"), file1);
+        MultipartBody.Part filePart1 = MultipartBody.Part.createFormData("files", file1.getName(), requestBody1);
+
+        RequestBody requestBody2 = RequestBody.create(MediaType.parse("multipart/form-data"), file2);
+        MultipartBody.Part filePart2 = MultipartBody.Part.createFormData("files", file2.getName(), requestBody2);
+
+        RequestBody requestBody3 = RequestBody.create(MediaType.parse("multipart/form-data"), file3);
+        MultipartBody.Part filePart3 = MultipartBody.Part.createFormData("files", file3.getName(), requestBody3);
+
+        RequestBody requestBody4 = RequestBody.create(MediaType.parse("multipart/form-data"), file4);
+        MultipartBody.Part filePart4 = MultipartBody.Part.createFormData("files", file4.getName(), requestBody4);
 
 
-        List<SensorData> sensorData = new ArrayList<>();
-
-        for (int i = 0; i < gyroData.size(); i++) {
-            SensorData newSensorDataToWrite = new SensorData();
-            String[] splittedGyro = gyroData.get(i).split(" ");
-            newSensorDataToWrite.setTimestamp(Long.parseLong(splittedGyro[0]));
-            newSensorDataToWrite.setGyro_x(Float.parseFloat(splittedGyro[1]));
-            newSensorDataToWrite.setGyro_y(Float.parseFloat(splittedGyro[2]));
-            newSensorDataToWrite.setGyro_z(Float.parseFloat(splittedGyro[3]));
-
-            String[] splittedAccelData = accelData.get(i).split(" ");
-            newSensorDataToWrite.setAcce_x(Float.parseFloat(splittedAccelData[1]));
-            newSensorDataToWrite.setAcce_y(Float.parseFloat(splittedAccelData[2]));
-            newSensorDataToWrite.setAcce_z(Float.parseFloat(splittedAccelData[3]));
-
-            String[] splitteRotationVectorData= rotationVectorData.get(i).split(" ");
-            newSensorDataToWrite.setGamerv_x(Float.parseFloat(splitteRotationVectorData[1]));
-            newSensorDataToWrite.setGamerv_y(Float.parseFloat(splitteRotationVectorData[2]));
-            newSensorDataToWrite.setGamerv_z(Float.parseFloat(splitteRotationVectorData[3]));
-            newSensorDataToWrite.setGamerv_w(Float.parseFloat(splitteRotationVectorData[4]));
-
-            sensorData.add(newSensorDataToWrite);
-        }
 
 
-//         Call the appropriate API method with the data you want to send
-        Call<Object> call = apiService.uploadSensorData(sensorData);
+        Call<ResponseBody> call = apiService.uploadFiles(filePart1,filePart2,filePart3,filePart4);
 
-        // Execute the API call
-        call.enqueue(new Callback<Object>() {
+        call.enqueue(new Callback<ResponseBody>() {
             @Override
-            public void onResponse(Call<Object> call, Response<Object> response) {
-                if (response.isSuccessful()) {
-                    // API call successful
-                    Object data = response.body();
-                    // Handle the response data as needed
-                } else {
-                    // API call failed
-                    Toast.makeText(MainActivity.this, "Failed to send data to server", Toast.LENGTH_SHORT).show();
-                }
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                // Handle successful response
             }
 
             @Override
-            public void onFailure(Call<Object> call, Throwable t) {
-                // Error occurred during API call
-                Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                // Handle failure
             }
         });
+
+
+
+//        List<SensorData> sensorData = new ArrayList<>();
+//
+//        for (int i = 0; i < gyroData.size(); i++) {
+//            SensorData newSensorDataToWrite = new SensorData();
+//            // Set the building value based on the selected option
+//            newSensorDataToWrite.setBuilding(selectedBuilding);
+//
+//            // Retrieve the device identifier
+//            String deviceId = getDeviceIdentifier();
+//            // Set the device identifier for the SensorData object
+//            newSensorDataToWrite.setDeviceId(deviceId);
+//
+//            sensorData.add(newSensorDataToWrite);
+//            String[] splittedGyro = gyroData.get(i).split(" ");
+//            newSensorDataToWrite.setTimestamp(Long.parseLong(splittedGyro[0]));
+//            newSensorDataToWrite.setGyro_x(Float.parseFloat(splittedGyro[1]));
+//            newSensorDataToWrite.setGyro_y(Float.parseFloat(splittedGyro[2]));
+//            newSensorDataToWrite.setGyro_z(Float.parseFloat(splittedGyro[3]));
+//
+//            String[] splittedAccelData = accelData.get(i).split(" ");
+//            newSensorDataToWrite.setAcce_x(Float.parseFloat(splittedAccelData[1]));
+//            newSensorDataToWrite.setAcce_y(Float.parseFloat(splittedAccelData[2]));
+//            newSensorDataToWrite.setAcce_z(Float.parseFloat(splittedAccelData[3]));
+//
+//            String[] splitteRotationVectorData= rotationVectorData.get(i).split(" ");
+//            newSensorDataToWrite.setGamerv_x(Float.parseFloat(splitteRotationVectorData[1]));
+//            newSensorDataToWrite.setGamerv_y(Float.parseFloat(splitteRotationVectorData[2]));
+//            newSensorDataToWrite.setGamerv_z(Float.parseFloat(splitteRotationVectorData[3]));
+//            newSensorDataToWrite.setGamerv_w(Float.parseFloat(splitteRotationVectorData[4]));
+//
+//            sensorData.add(newSensorDataToWrite);
+//        }
+//
+//
+////         Call the appropriate API method with the data you want to send
+//        Call<Object> call = apiService.uploadSensorData(sensorData);
+//
+//        // Execute the API call
+//        call.enqueue(new Callback<Object>() {
+//            @Override
+//            public void onResponse(Call<Object> call, Response<Object> response) {
+//                if (response.isSuccessful()) {
+//                    // API call successful
+//                    Object data = response.body();
+//                    // Handle the response data as needed
+//                } else {
+//                    // API call failed
+//                    Toast.makeText(MainActivity.this, "Failed to send data to server", Toast.LENGTH_SHORT).show();
+//                }
+//            }
+//
+//            @Override
+//            public void onFailure(Call<Object> call, Throwable t) {
+//                // Error occurred during API call
+//                Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+//            }
+//        });
     }
 
     private void stopReadingData() {
@@ -295,6 +400,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         startReadingButton.setVisibility(View.VISIBLE);
 //        dataTextView.setText("");
         sendDataToServer();
+        currentSessionFileFolder = UUID.randomUUID().toString();
         isReadingData = false;
     }
 
@@ -303,7 +409,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (!downloadsDir.exists()) {
             downloadsDir.mkdirs();
         }
-        return downloadsDir.getAbsolutePath() + File.separator+ fileName;
+
+
+        String filePath = downloadsDir.getAbsolutePath() + File.separator + "FypData" + File.separator +  currentSessionFileFolder + File.separator + fileName;
+
+        File file = new File(filePath);
+        file.getParentFile().mkdirs();
+
+        return filePath;
     }
 
     private void writeDataToFile( String fileName,Queue<String> queue) {

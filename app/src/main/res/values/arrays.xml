@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?><!-- Add this code within your array resource file -->
+<resources>
+    <string-array name="building_options">
+        <item>uniA</item>
+        <item>uniB</item>
+        <item>office</item>
+        <item>demo</item>
+        <item>Random</item>
+    </string-array>
+</resources>

@@ -32,6 +32,12 @@
         android:layout_height="wrap_content"
         android:text="Stop Reading"
         android:visibility="gone" />
+    <!-- Add this code within your layout XML file -->
+    <Spinner
+        android:id="@+id/buildingSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:entries="@array/building_options" />
 
     <TextView
         android:id="@+id/dataTextView"

@@ -11,6 +11,25 @@ public class SensorData {
     private float gamerv_w;
     private float acce_x;
     private float acce_y;
+    private String deviceId;
+    private String building;
+
+    public void setDeviceId(String deviceId) {
+        this.deviceId = deviceId;
+    }
+
+    public String getDeviceId() {
+        return deviceId;
+    }
+    public String getBuilding() {
+        return building;
+    }
+
+    public void setBuilding(String building) {
+        this.building = building;
+    }
+
+
 
     public long getTimestamp() {
         return timestamp;
