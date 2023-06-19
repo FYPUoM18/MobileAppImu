@@ -325,65 +325,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             }
         });
 
-
-
-//        List<SensorData> sensorData = new ArrayList<>();
-//
-//        for (int i = 0; i < gyroData.size(); i++) {
-//            SensorData newSensorDataToWrite = new SensorData();
-//            // Set the building value based on the selected option
-//            newSensorDataToWrite.setBuilding(selectedBuilding);
-//
-//            // Retrieve the device identifier
-//            String deviceId = getDeviceIdentifier();
-//            // Set the device identifier for the SensorData object
-//            newSensorDataToWrite.setDeviceId(deviceId);
-//
-//            sensorData.add(newSensorDataToWrite);
-//            String[] splittedGyro = gyroData.get(i).split(" ");
-//            newSensorDataToWrite.setTimestamp(Long.parseLong(splittedGyro[0]));
-//            newSensorDataToWrite.setGyro_x(Float.parseFloat(splittedGyro[1]));
-//            newSensorDataToWrite.setGyro_y(Float.parseFloat(splittedGyro[2]));
-//            newSensorDataToWrite.setGyro_z(Float.parseFloat(splittedGyro[3]));
-//
-//            String[] splittedAccelData = accelData.get(i).split(" ");
-//            newSensorDataToWrite.setAcce_x(Float.parseFloat(splittedAccelData[1]));
-//            newSensorDataToWrite.setAcce_y(Float.parseFloat(splittedAccelData[2]));
-//            newSensorDataToWrite.setAcce_z(Float.parseFloat(splittedAccelData[3]));
-//
-//            String[] splitteRotationVectorData= rotationVectorData.get(i).split(" ");
-//            newSensorDataToWrite.setGamerv_x(Float.parseFloat(splitteRotationVectorData[1]));
-//            newSensorDataToWrite.setGamerv_y(Float.parseFloat(splitteRotationVectorData[2]));
-//            newSensorDataToWrite.setGamerv_z(Float.parseFloat(splitteRotationVectorData[3]));
-//            newSensorDataToWrite.setGamerv_w(Float.parseFloat(splitteRotationVectorData[4]));
-//
-//            sensorData.add(newSensorDataToWrite);
-//        }
-//
-//
-////         Call the appropriate API method with the data you want to send
-//        Call<Object> call = apiService.uploadSensorData(sensorData);
-//
-//        // Execute the API call
-//        call.enqueue(new Callback<Object>() {
-//            @Override
-//            public void onResponse(Call<Object> call, Response<Object> response) {
-//                if (response.isSuccessful()) {
-//                    // API call successful
-//                    Object data = response.body();
-//                    // Handle the response data as needed
-//                } else {
-//                    // API call failed
-//                    Toast.makeText(MainActivity.this, "Failed to send data to server", Toast.LENGTH_SHORT).show();
-//                }
-//            }
-//
-//            @Override
-//            public void onFailure(Call<Object> call, Throwable t) {
-//                // Error occurred during API call
-//                Toast.makeText(MainActivity.this, "Error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
-//            }
-//        });
     }
 
     private void stopReadingData() {
